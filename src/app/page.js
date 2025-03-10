@@ -1,119 +1,83 @@
-
-
+// Code: Home Page
 "use client";
 
-import { useState } from "react";
-import QuizForm from "./Components/QuizForm";
-import QuizDisplay from "./Components/QuizDisplay";
-import ScoreDisplay from "./Components/ScoreDisplay";
-import Timer from "./Components/Timer"; // ✅ Ensure Timer is imported correctly
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const [quiz, setQuiz] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [answers, setAnswers] = useState({});
-  const [score, setScore] = useState(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [timer, setTimer] = useState(null);
-  const [timerRunning, setTimerRunning] = useState(false);
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false); // ✅ Prevent hydration mismatch
 
-  // Fetch quiz questions from API
-  const fetchQuiz = async (topic, difficulty, count, time) => {
-    setLoading(true);
-    setQuiz([]);
-    setScore(null);
-    setAnswers({});
-    setSubmitted(false);
+  // ✅ Check if user is logged in (Only on client-side)
+  useEffect(() => {
+    if (typeof window !== "undefined") { // ✅ Ensure it's running in the browser
+      const token = localStorage.getItem("token");
 
+      if (token) {
+        fetchUser(token);
+      } else {
+        setAuthChecked(true); // ✅ Allow UI to render even if no token is found
+      }
+    }
+  }, []);
+
+  // ✅ Fetch user details
+  const fetchUser = async (token) => {
     try {
-      const response = await fetch("/api/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, difficulty, count }),
+      const response = await fetch("/api/auth/user", {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       const data = await response.json();
-      if (data.quiz) {
-        setQuiz(data.quiz);
-        if (time > 0) {
-          setTimer(Number(time));
-          setTimerRunning(true);
-        }
+
+      if (!response.ok) {
+        throw new Error(data.message || "Invalid token, redirecting...");
       }
+
+      setUser(data.user);
     } catch (error) {
-      console.error("Error fetching quiz:", error);
+      console.error("Authentication error:", error.message);
+      localStorage.removeItem("token"); // Remove invalid token
+      router.replace("/login");
     } finally {
-      setLoading(false);
+      setAuthChecked(true); // ✅ Ensure UI renders after authentication check
     }
   };
 
-  // Handle answer selection
-  const handleAnswerChange = (questionIndex, selectedOption) => {
-    if (!submitted) {
-      setAnswers((prev) => ({
-        ...prev,
-        [questionIndex]: selectedOption,
-      }));
-    }
-  };
-
-  // Submit quiz and calculate score
-  const handleSubmit = () => {
-    let correctAnswers = 0;
-    quiz.forEach((q, index) => {
-      if (answers[index] === q.answer) {
-        correctAnswers++;
-      }
-    });
-
-    setScore(correctAnswers);
-    setSubmitted(true);
-    setTimerRunning(false); // ✅ Stop the timer when quiz is submitted
-  };
+  // ✅ Prevent rendering until auth check is completed
+  if (!authChecked) {
+    return <div className="text-white text-lg">Loading...</div>;
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-6">
-      <h1 className="text-4xl font-extrabold mb-6">AI Quiz Generator</h1>
-
-      {/* Quiz Form */}
-      <QuizForm fetchQuiz={fetchQuiz} loading={loading} />
-
-      {/* Quiz Display & Timer */}
-      {quiz.length > 0 && (
-        <div className="relative w-full max-w-lg p-6 mt-6 bg-gray-800 rounded-xl shadow-lg">
-          {/* ✅ Timer Component (Only show if the quiz is not submitted) */}
-          {timer > 0 && timerRunning && (
-            <Timer time={timer} setTimer={setTimer} setTimerRunning={setTimerRunning} handleSubmit={handleSubmit} />
-          )}
-
-          {/* ✅ Quiz Display - Always visible, even after submission */}
-          <QuizDisplay
-            quiz={quiz}
-            answers={answers}
-            setAnswers={setAnswers}
-            submitted={submitted}
-            setSubmitted={setSubmitted}
-            setScore={setScore}
-            handleAnswerChange={handleAnswerChange}
-          />
-
-          {/* ✅ Show Submit button only if the quiz is not submitted */}
-          {!submitted && (
-            <button
-              className="w-full mt-6 p-3 bg-green-500 rounded-lg font-semibold text-white hover:bg-green-600 transition duration-200 disabled:bg-gray-500"
-              onClick={handleSubmit}
-              disabled={submitted}
-            >
-              Submit Answers
-            </button>
-          )}
+      <h1 className="text-4xl font-extrabold mb-6">Welcome to AI Quiz Generator</h1>
+      
+      {/* ✅ Show User Info & Logout */}
+      {user && (
+        <div className="absolute top-4 right-4 bg-gray-800 p-3 rounded-lg">
+          <p className="text-sm">Welcome, {user.username}!</p>
+          <button
+            onClick={() => {
+              localStorage.removeItem("token");
+              setUser(null);
+              router.replace("/login");
+            }}
+            className="mt-2 bg-red-500 px-3 py-1 rounded text-sm hover:bg-red-600"
+          >
+            Logout
+          </button>
         </div>
       )}
 
-      {/* ✅ Score Display - Visible only after submission */}
-      {submitted && <ScoreDisplay score={score} total={quiz.length} />}
-
-     
+      {/* ✅ Navigation Button */}
+      <button
+        onClick={() => router.push(user ? "/quiz" : "/login")}
+        className="p-4 mt-4 bg-blue-500 rounded-lg font-semibold text-white text-lg hover:bg-blue-600 transition duration-200"
+      >
+        {user ? "Start Quiz" : "Login to Continue"}
+      </button>
     </div>
   );
 }

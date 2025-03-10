@@ -1,25 +1,34 @@
-
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from "next/server";
+import connectDB from "@/utils/db";
 
 export async function POST(req) {
+  await connectDB();
+
   try {
     const { topic, difficulty, count } = await req.json();
 
     if (!topic || !difficulty || !count || isNaN(count) || count <= 0) {
-      return Response.json({ error: "Valid topic, difficulty, and count are required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Valid topic, difficulty, and count are required." },
+        { status: 400 }
+      );
     }
 
-    if (!process.env.GOOGLE_API_KEY) {
-      return Response.json({ error: "Missing GOOGLE_API_KEY." }, { status: 500 });
+    const API_KEY = process.env.GOOGLE_API_KEY;
+    if (!API_KEY) {
+      return NextResponse.json(
+        { error: "Server configuration error: Missing API key." },
+        { status: 500 }
+      );
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Strict JSON formatting to avoid markdown artifacts
     const prompt = `
       Generate a ${difficulty} level multiple-choice quiz on ${topic} with ${count} questions.
-      The response should be a **valid JSON array** in the following format:
+      Response must be a **valid JSON array** in the following format:
       [
         {
           "question": "What is the capital of France?",
@@ -27,32 +36,40 @@ export async function POST(req) {
           "answer": "Paris"
         }
       ]
-      DO NOT include Markdown formatting (e.g., \`\`\`json or \`\`\`).
-      ONLY return valid JSON, no explanations.
+      Do NOT include Markdown formatting (\`\`\`json or \`\`\`).
+      Return ONLY valid JSON. No explanations, no extra text.
     `;
-
-    console.log(`Requesting ${count} questions from Gemini API...`);
 
     const result = await model.generateContent(prompt);
     let textResponse = await result.response.text();
 
-    // Ensure it is valid JSON
     textResponse = textResponse.trim();
     if (textResponse.startsWith("```json")) {
       textResponse = textResponse.replace(/```json/, "").replace(/```/, "").trim();
     }
 
-    const quizData = JSON.parse(textResponse);
-
-    if (!Array.isArray(quizData) || quizData.length !== count) {
-      throw new Error("Invalid or incomplete quiz data received from Gemini API.");
+    let quizData;
+    try {
+      quizData = JSON.parse(textResponse);
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON format received from AI service." },
+        { status: 500 }
+      );
     }
 
-    console.log(`Quiz with ${count} questions successfully generated.`);
+    if (!Array.isArray(quizData) || quizData.length !== count) {
+      return NextResponse.json(
+        { error: "Incomplete or incorrect quiz data received." },
+        { status: 500 }
+      );
+    }
 
-    return Response.json({ quiz: quizData });
-  } catch (error) {
-    console.error("Quiz generation failed:", error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ quiz: quizData });
+  } catch {
+    return NextResponse.json(
+      { error: "Quiz generation failed due to an internal error." },
+      { status: 500 }
+    );
   }
 }

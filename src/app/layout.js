@@ -1,4 +1,3 @@
-
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,10 +16,9 @@ export const metadata = {
   description: "This is my custom Next.js app",
   icons: {
     icon: "/favicon.svg",
-    apple: "/favicon.svg", 
+    apple: "/favicon.svg",
   },
 };
-
 
 export default function RootLayout({ children }) {
   return (
@@ -29,6 +27,11 @@ export default function RootLayout({ children }) {
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <footer className="w-full py-2 bg-gray-800 text-gray-300 text-center text-md md:text-sm leading-tight">
+          <div className="container mx-auto">
+            <p>© {new Date().getFullYear()} Abishek S. All rights reserved.</p>
+          </div>
+        </footer>
       </body>
     </html>
   );
